@@ -5055,6 +5055,8 @@
 
                 REAL              :: TempR
 
+                ERROR = .false. ! Initialize
+
                 IF(VersionNumber.EQ.0)THEN
                     IF(InputFile(1:2).EQ."FG")THEN
                         READ(UNIT=InputFile,FMT='(2X,I2)') VersionNumber
