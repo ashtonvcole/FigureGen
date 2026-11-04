@@ -1708,6 +1708,7 @@
                         ENDIF
                     ENDDO
                 ENDDO    
+                IF(MyRank.EQ.0) WRITE(*,'(A)') "FATAL ERROR: NetCDF variable search finished without finding a match."
                 STOP  
             END SUBROUTINE    
                     
@@ -10863,6 +10864,7 @@
 #ifdef CMPI
                         CALL MPI_FINALIZE(IERR)
 #endif
+                        IF(MyRank.EQ.0) WRITE(*,'(A)') "FATAL ERROR: ReadInputFile reported an error (see messages above). FigureGen is quitting."
                         STOP
                    ENDIF
                    
@@ -10875,6 +10877,7 @@
 #ifdef CMPI
                            CALL MPI_FINALIZE(IERR)
 #endif                           
+                           IF(MyRank.EQ.0) WRITE(*,'(A)') "FATAL ERROR: Could not read the output file list. FigureGen is quitting."
                            STOP
                        ENDIF 
 #ifdef CMPI                       
@@ -10897,6 +10900,7 @@
                    CALL ReadInputFile(InputFileError)
                    IF(InputFileError)THEN
                         CALL MPI_FINALIZE(IERR)
+                        WRITE(*,'(A,I4.4,A)') "Core ",MyRank," stopping: input file read error reported by rank 0."
                         STOP
                    ENDIF
                    
@@ -10904,6 +10908,7 @@
                       CALL MPI_BCAST(ReadError,1,MPI_LOGICAL,0,MPI_COMM_WORLD,IERR)
                       IF(ReadError)THEN
                          CALL MPI_FINALIZE(IERR)
+                         WRITE(*,'(A,I4.4,A)') "Core ",MyRank," stopping: output file list read error reported by rank 0."
                          STOP
                       ENDIF
 
@@ -11046,6 +11051,7 @@
                 IF(MyRank.NE.0)THEN
                     CALL MPI_RECV(JunkI,1,MPI_INTEGER,0,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE,IERR)
                     IF(JunkI.NE.0)THEN
+                       WRITE(*,'(A,I4.4,A)') "Core ",MyRank," stopping: rank 0 reported a fatal error."
                        STOP
                     ENDIF
                 ENDIF
