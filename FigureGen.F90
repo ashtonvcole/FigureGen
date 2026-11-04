@@ -1410,6 +1410,22 @@
             CHARACTER(LEN=200)  :: NETCDF_TYPES(39)
             CHARACTER(LEN=50)   :: Palette
             CHARACTER(LEN=50)   :: Path
+            CHARACTER(LEN=60)   :: GMTPrefix
+            INTEGER             :: GMTPrefixLen
+#ifdef GMT6
+            CHARACTER(LEN=1),PARAMETER :: PenSep  = ","       ! width,color
+            CHARACTER(LEN=1),PARAMETER :: FontSep = ","       ! size,font
+            CHARACTER(LEN=2),PARAMETER :: TriOpt  = "-E"      ! pscontour network file
+            CHARACTER(LEN=9),PARAMETER :: Ps2RasterCmd = "psconvert"
+            !...psconvert appends the extension to the name given with -F
+            CHARACTER(LEN=0),PARAMETER :: ExtPNG = "", ExtJPG = "", ExtPDF = "", ExtBMP = "", ExtTIF = "", ExtEPS = ""
+#else
+            CHARACTER(LEN=1),PARAMETER :: PenSep  = "/"
+            CHARACTER(LEN=1),PARAMETER :: FontSep = " "
+            CHARACTER(LEN=2),PARAMETER :: TriOpt  = "-T"
+            CHARACTER(LEN=9),PARAMETER :: Ps2RasterCmd = "ps2raster"
+            CHARACTER(LEN=4),PARAMETER :: ExtPNG = ".png", ExtJPG = ".jpg", ExtPDF = ".pdf", ExtBMP = ".bmp", ExtTIF = ".tif", ExtEPS = ".eps"
+#endif
             CHARACTER(LEN=50)   :: ParticleColor
             CHARACTER(LEN=50)   :: ParticleFile
             CHARACTER(LEN=50)   :: ParticleFileFormat
@@ -3995,7 +4011,7 @@
               ENDDO
               IF(((IfPlotFilledContours.GE.1).OR.(TRIM(ColorLines).NE."DEFAULT")).AND. &
                  (INDEX(ContourFileType,"GRID-DECOMP").LE.0))THEN
-                 CALL SYSTEM(TRIM(Path)//"ps2raster Scale.ps -A -E600 -FScale.jpg"// &
+                 CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//" Scale.ps -A -E600 -FScale.jpg"// &
                              " -G"//TRIM(GSPath)//"gs -P -Tg")
                  Line = "zip -q "//TRIM(GoogleLabel)//".kmz "//"Scale.png"
                  CALL SYSTEM(TRIM(Line))
@@ -4582,9 +4598,22 @@
 
                 DO I=1,NumElemsLocal
 
+#ifdef GMT6
+                    !...GMT 6 pscontour paints every triangle in the index file, even those
+                    !   outside of the plot, so only list triangles that overlap the plot box.
+                    IF((MAX(Long(NC(1,NEList(I))),Long(NC(2,NEList(I))),Long(NC(3,NEList(I)))).GE.LongW).AND. &
+                       (MIN(Long(NC(1,NEList(I))),Long(NC(2,NEList(I))),Long(NC(3,NEList(I)))).LE.LongE).AND. &
+                       (MAX(Lat( NC(1,NEList(I))),Lat( NC(2,NEList(I))),Lat( NC(3,NEList(I)))).GE.LatS ).AND. &
+                       (MIN(Lat( NC(1,NEList(I))),Lat( NC(2,NEList(I))),Lat( NC(3,NEList(I)))).LE.LatN ))THEN
+                        WRITE(UNIT=13,FMT=*) OldToNew(NC(1,NEList(I)))-1, &
+                                             OldToNew(NC(2,NEList(I)))-1, &
+                                             OldToNew(NC(3,NEList(I)))-1
+                    ENDIF
+#else
                     WRITE(UNIT=13,FMT=*) OldToNew(NC(1,NEList(I)))-1, &
                                          OldToNew(NC(2,NEList(I)))-1, &
                                          OldToNew(NC(3,NEList(I)))-1
+#endif
 
                     IF(IfPlotGrid.EQ.1)THEN
 
@@ -5045,6 +5074,15 @@
                 ELSE
                     READ(UNIT=11,FMT='(A50)') GSPath
                 ENDIF
+#ifdef GMT6
+                !...GMT 6 provides all modules through the single "gmt" executable
+                !   (the trailing blank is kept by tracking the length explicitly)
+                GMTPrefix    = TRIM(Path)//"gmt "
+                GMTPrefixLen = LEN_TRIM(Path) + 4
+#else
+                GMTPrefix    = TRIM(Path)
+                GMTPrefixLen = LEN_TRIM(Path)
+#endif
                 READ(UNIT=11,FMT='(A50)') TempPath
                 IF(TempPath(LEN_TRIM(TempPath):LEN_TRIM(TempPath)).NE."/")THEN
                     TempPath = TRIM(TempPath)//"/"
@@ -6849,12 +6887,12 @@
                 WRITE(UNIT=29,FMT=*) LongELocal,LatNLocal
                 CLOSE(UNIT=29,STATUS="KEEP")
                 IF(IfGoogle.EQ.0)THEN        
-                    CALL SYSTEM(TRIM(Path)//"mapproject "//TRIM(TempMapFile1)                 &
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"mapproject "//TRIM(TempMapFile1)                 &
                                 //" -Di "//TRIM(ProjectionC)//" -R"//TRIM(ADJUSTL(XMin))//"/" &
                                 //TRIM(ADJUSTL(XMax))//"/"//TRIM(ADJUSTL(YMin))//"/"          &
                                 //TRIM(ADJUSTL(YMax))//" > "//TRIM(TempMapFile2))                        
                 ELSEIF(IfGoogle.EQ.1)THEN
-                    CALL SYSTEM(TRIM(Path)//"mapproject "//TRIM(TempMapFile1)               &
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"mapproject "//TRIM(TempMapFile1)               &
                                 //" -Di "//TRIM(ProjectionC)                                &
                                 //" -R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                 //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))             &
@@ -7072,10 +7110,14 @@
                         CALL SYSTEM(TRIM(Line))
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"psimage"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psimage"
                         Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(GeoRefFileEPS)
+#ifdef GMT6
+                        Line = TRIM(Line)//" "//"-Dx0/0+jBL+w"//TRIM(ADJUSTL(WidthC))//"i/"//TRIM(ADJUSTL(HeightC))//"i"
+#else
                         Line = TRIM(Line)//" "//"-W"//TRIM(ADJUSTL(WidthC))//"i/"//TRIM(ADJUSTL(HeightC))//"i"
                         Line = TRIM(Line)//" "//"-C0/0/BL"
+#endif
                         Line = TRIM(Line)//" "//"-K"
                         Line = TRIM(Line)//" "//">"
                         Line = TRIM(Line)//" "//TRIM(PlotName)//".ps"
@@ -7100,7 +7142,7 @@
                     IF(OptimizeContours.EQ.0)THEN
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"pscontour"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"pscontour"
                         Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(ContourXYZFile)
                         Line = TRIM(Line)//" "//"-C"//TRIM(TempPath)//"ContourPalette.cpt"
                         Line = TRIM(Line)//" "//TRIM(ProjectionC)
@@ -7108,17 +7150,22 @@
                                                     //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                         IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                             WroteBorder = .TRUE.
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                               " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                             Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                                "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                         ENDIF
                         Line = TRIM(Line)//" "//"-I"
                         IF(TRIM(ContourFileType).EQ."OWI-PRESS".OR.TRIM(ContourFileType).EQ."OWI-WIND")THEN
                             !Line = TRIM(Line)//" "//"-T"//TRIM(TempPath)//TRIM(ContourFile1)//".tri"
                             !...Let GMT triangulate on its own
                         ELSE    
-                            Line = TRIM(Line)//" "//"-T"//TRIM(TempPath)//TRIM(Fort14File)//".tri"
+                            Line = TRIM(Line)//" "//TriOpt//TRIM(TempPath)//TRIM(Fort14File)//".tri"
                         ENDIF    
                         IF(KeepOpen(1).EQ.1)THEN
                             Line = TRIM(Line)//" "//"-K"
@@ -7135,7 +7182,7 @@
                     ELSEIF(OptimizeContours.EQ.1)THEN
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"triangulate"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"triangulate"
                         Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(ContourXYZFile)
                         Line = TRIM(Line)//" "//"-G"//TRIM(TempPath)//TRIM(ContourXYZFile)//".grd"
                         Line = TRIM(Line)//" "//"-I"//TRIM(MinDistC)
@@ -7146,16 +7193,21 @@
                         CALL SYSTEM(TRIM(Line))
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"grdimage"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"grdimage"
                         Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(ContourXYZFile)//".grd"
                         Line = TRIM(Line)//" "//"-C"//TRIM(TempPath)//"ContourPalette.cpt"
                         Line = TRIM(Line)//" "//TRIM(ProjectionC)
                         IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                             WroteBorder = .TRUE.
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                               " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                             Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                                "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                         ENDIF
                         Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                     //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
@@ -7191,28 +7243,47 @@
                         WRITE(UNIT=EdgeFileName,FMT='(A,I3.3,A)') TRIM(TempPath)//TRIM(Fort14File)//".edges.",IN,".xy"
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"psxy"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psxy"
                         Line = TRIM(Line)//" "//TRIM(EdgeFileName)
                         Line = TRIM(Line)//" "//TRIM(ProjectionC)
                         Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                     //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                         IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                             WroteBorder = .TRUE.
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                               " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                             Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                                "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                         ENDIF
                         IF(INDEX(ColorLines,"GRID").GT.0)THEN
                             Line = TRIM(Line)//" "//"-C"//TRIM(TempPath)//"ContourPalette.cpt"
                         ENDIF
+#ifndef GMT6
                         Line = TRIM(Line)//" "//"-m"
+#endif
                         IF(TRIM(ColorLines).EQ."GRID-BATH")THEN
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-W+c"
+#else
                             Line = TRIM(Line)//" "//"-W+"
+#endif
                         ELSEIF(INDEX(ColorLines,"GRID-DECOMP").GT.0)THEN
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-W+c"
+#else
                             Line = TRIM(Line)//" "//"-W+"
+#endif
                         ELSEIF(TRIM(ColorLines).EQ."GRID-SIZE")THEN
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-W+c"
+#else
                             Line = TRIM(Line)//" "//"-W+"
+#endif
                         ELSE
                             Line = TRIM(Line)//" "//"-W1,Black"
                         ENDIF
@@ -7248,17 +7319,22 @@
                     IF(OptimizeContours.EQ.0)THEN
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"pscontour"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"pscontour"
                         Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(ContourXYZFile)
                         Line = TRIM(Line)//" "//TRIM(ProjectionC)
                         Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                     //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                         IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                             WroteBorder = .TRUE.
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                               " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                             Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                                "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                         ENDIF
                         Line = TRIM(Line)//" "//"-C"//TRIM(TempPath)//"LabelPalette.cpt"
                         IF(ContourLabelEvery.LT.0.0000001)THEN
@@ -7269,14 +7345,18 @@
                                                     "i+r"//TRIM(ADJUSTL(ContourLabelMinDistC))//"i"
                         ENDIF
                         IF(TRIM(ColorLines).EQ."CONTOUR-LINES")THEN
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-W+c"
+#else
                             Line = TRIM(Line)//" "//"-W+"
+#endif
                         ELSE
                             Line = TRIM(Line)//" "//"-W"
                         ENDIF
                         IF(TRIM(ContourFileType).EQ."OWI-PRESS".OR.TRIM(ContourFileType).EQ."OWI-WIND")THEN
                             !...Lets use GMT triangulation
                         ELSE
-                            Line = TRIM(Line)//" "//"-T"//TRIM(TempPath)//TRIM(Fort14File)//".tri"
+                            Line = TRIM(Line)//" "//TriOpt//TRIM(TempPath)//TRIM(Fort14File)//".tri"
                         ENDIF    
                         IF(KeepOpen(3).EQ.1)THEN
                             Line = TRIM(Line)//" "//"-K"
@@ -7293,7 +7373,7 @@
                     ELSEIF(OptimizeContours.EQ.1)THEN
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"grdcontour"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"grdcontour"
                         Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(ContourXYZFile)//".grd"
                         Line = TRIM(Line)//" "//"-C"//TRIM(TempPath)//"LabelPalette.cpt"
                         Line = TRIM(Line)//" "//TRIM(ProjectionC)
@@ -7306,15 +7386,24 @@
                         ENDIF
                         IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                             WroteBorder = .TRUE.
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                               " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                             Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                                "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                         ENDIF
                         Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                     //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                         IF(TRIM(ColorLines).EQ."CONTOUR-LINES")THEN
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-W+c"
+#else
                             Line = TRIM(Line)//" "//"-W+"
+#endif
                         ELSE
                             Line = TRIM(Line)//" "//"-W"
                         ENDIF
@@ -7349,14 +7438,34 @@
                    UseParticlePalette.EQV..FALSE.)THEN
 
                     Line = ""
-#ifdef CBARLIMIT
-                    Line = TRIM(Line)//TRIM(Path)//"psscale -E"
+#if defined(CBARLIMIT) && !defined(GMT6)
+                    Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psscale -E"
 #else
-                    Line = TRIM(Line)//TRIM(Path)//"psscale"
+                    Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psscale"
 #endif
+#ifdef GMT6
+                    Line = TRIM(Line)//" "//"-Dx"//TRIM(ADJUSTL(SideBarXC))//"i/"//TRIM(ADJUSTL(ContourScaleYC))//"i" &
+                                     //"+w"//TRIM(ADJUSTL(ScaleHeightC))//"i/"//TRIM(ADJUSTL(ScaleWidthC))//"i+jMC"
+#ifdef CBARLIMIT
+                    Line = TRIM(Line)//"+e"
+#endif
+                    IF(TRIM(ContourFileType).EQ."HWM-CSV")THEN
+                        Line = TRIM(Line)//"+e"//TRIM(SideBarTriangleHeightC)
+                    ENDIF
+#else
                     Line = TRIM(Line)//" "//"-D"//TRIM(ADJUSTL(SideBarXC))//"i/"//TRIM(ADJUSTL(ContourScaleYC))//"i/" &
                                      //TRIM(ADJUSTL(ScaleHeightC))//"i/"//TRIM(ADJUSTL(ScaleWidthC))//"i"
+#endif
                     Line = TRIM(Line)//" "//"-C"//TRIM(TempPath)//"ScalePalette.cpt"
+#ifdef GMT6
+                    IF(INDEX(Palette,"INTERVALS").LE.0)THEN
+                        Line = TRIM(Line)//" "//"-Bxa"//TRIM(ADJUSTL(ScaleLabelEveryC))
+                        Line = TRIM(Line)//" "//"-By+l"//""""//TRIM(ContourUnits)//""""
+                    ELSEIF(INDEX(Palette,"INTERVALS").GT.0)THEN
+                        Line = TRIM(Line)//" "//"-By+l"//""""//TRIM(ContourUnits)//""""
+                        Line = TRIM(Line)//" "//"-L"
+                    ENDIF
+#else
                     IF(INDEX(Palette,"INTERVALS").LE.0)THEN
                         Line = TRIM(Line)//" "//"-B"//TRIM(ADJUSTL(ScaleLabelEveryC))//"::/:"//""""//TRIM(ContourUnits)//""""//":"
                     ELSEIF(INDEX(Palette,"INTERVALS").GT.0)THEN
@@ -7366,6 +7475,7 @@
                     IF(TRIM(ContourFileType).EQ."HWM-CSV")THEN
                         Line = TRIM(Line)//" "//"-E"//TRIM(SideBarTriangleHeightC)
                     ENDIF
+#endif
                     IF((IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                         IF(KeepOpen(4).EQ.1)THEN
                             Line = TRIM(Line)//" "//"-K"
@@ -7397,19 +7507,26 @@
                 IF(IfPlotBoundaries.GE.1)THEN
 
                     Line = ""
-                    Line = TRIM(Line)//TRIM(Path)//"psxy"
+                    Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psxy"
                     Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(Fort14File)//".bnd.xy"
                     Line = TRIM(Line)//" "//TRIM(ProjectionC)
                     Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                 //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                     IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                         WroteBorder = .TRUE.
+#ifdef GMT6
+                        Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                           " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                         Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                            "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                            "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                            "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                     ENDIF
+#ifndef GMT6
                     Line = TRIM(Line)//" "//"-m"
+#endif
                     Line = TRIM(Line)//" "//"-W"//TRIM(BoundariesThickness)//","//TRIM(BoundariesColor)
                     IF(KeepOpen(5).EQ.1)THEN
                         Line = TRIM(Line)//" "//"-K"
@@ -7437,18 +7554,23 @@
                 IF(IfPlotCoastline.GT.0)THEN
 
                     Line = ""
-                    Line = TRIM(Line)//TRIM(Path)//"pscoast"
+                    Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"pscoast"
                     Line = TRIM(Line)//" "//TRIM(ProjectionC)
                     IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                         WroteBorder = .TRUE.
+#ifdef GMT6
+                        Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                           " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                         Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                            "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                            "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                            "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                     ENDIF
                     Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                 //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
-                    Line = TRIM(Line)//" "//"-W"//TRIM(CoastlineThickness)//"p/"//TRIM(CoastlineColor)
+                    Line = TRIM(Line)//" "//"-W"//TRIM(CoastlineThickness)//"p"//PenSep//TRIM(CoastlineColor)
                     Line = TRIM(Line)//" "//"-D"//CoastlineRes//"+"
                     Line = TRIM(Line)//" "//"-A0/0/"//CoastlineWB
                     IF(KeepOpen(6).EQ.1) THEN
@@ -7478,17 +7600,22 @@
 
                     WRITE(UNIT=ParticleXYZFile,FMT='(A,A,I4.4,A)') TRIM(ParticleFile),".",Record,".xy"
                     Line = ""
-                    Line = TRIM(Line)//TRIM(Path)//"psxy"
+                    Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psxy"
                     Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(ParticleXYZFile)
                     Line = TRIM(Line)//" "//TRIM(ProjectionC)
                     Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                 //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                     IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                         WroteBorder = .TRUE.
+#ifdef GMT6
+                        Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                           " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                         Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                            "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                            "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                            "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                     ENDIF
                     IF(UseParticlePalette)THEN
                         Line = TRIM(Line)//" -C"//TRIM(ParticlePalette)
@@ -7496,7 +7623,11 @@
                         IF(ParticlePattern(1:1).EQ."0")THEN
                             Line = TRIM(Line)//" "//"-G"//TRIM(ParticleColor)
                         ELSE
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-Gp100/"//TRIM(ParticlePattern)//"+f"//TRIM(ParticleColor)//"+b-"
+#else
                             Line = TRIM(Line)//" "//"-Gp100/"//TRIM(ParticlePattern)//":F"//TRIM(ParticleColor)//"B-"
+#endif
                         ENDIF
                     ENDIF    
                     IF(KeepOpen(7).EQ.1.OR.UseParticlePalette) THEN
@@ -7514,11 +7645,19 @@
 
                     IF(UseParticlePalette)THEN
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"psscale"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psscale"
+#ifdef GMT6
+                        Line = TRIM(Line)//" "//"-Dx"//TRIM(ADJUSTL(SideBarXC))//"i/"//TRIM(ADJUSTL(ContourScaleYC))//"i" &
+                                         //"+w"//TRIM(ADJUSTL(ScaleHeightC))//"i/"//TRIM(ADJUSTL(ScaleWidthC))//"i+jMC"
+                        Line = TRIM(Line)//" "//"-C"//TRIM(ParticlePalette)
+                        Line = TRIM(Line)//" "//"-Bxa"//TRIM(ADJUSTL(ScaleLabelEveryC))
+                        Line = TRIM(Line)//" "//"-By+l"//""""//TRIM(ContourUnits)//""""
+#else
                         Line = TRIM(Line)//" "//"-D"//TRIM(ADJUSTL(SideBarXC))//"i/"//TRIM(ADJUSTL(ContourScaleYC))//"i/" &
                                          //TRIM(ADJUSTL(ScaleHeightC))//"i/"//TRIM(ADJUSTL(ScaleWidthC))//"i"
                         Line = TRIM(Line)//" "//"-C"//TRIM(ParticlePalette)
                         Line = TRIM(Line)//" "//"-B"//TRIM(ADJUSTL(ScaleLabelEveryC))//"::/:"//""""//TRIM(ContourUnits)//""""//":"
+#endif
                         IF(KeepOpen(7).EQ.1)THEN
                             Line = TRIM(Line)//" "//"-K"
                         ENDIF
@@ -7546,7 +7685,7 @@
                 IF(IfPlotDotsLines.GT.0)THEN
 
                     Line = ""
-                    Line = TRIM(Line)//TRIM(Path)//"psxy"
+                    Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psxy"
                     Line = TRIM(Line)//" "//TRIM(DotsLinesFile)
                     Line = TRIM(Line)//" "//TRIM(ProjectionC)
                     Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
@@ -7555,10 +7694,12 @@
                         Line = TRIM(Line)//" "//"-G"//TRIM(DotsLinesColor)
                         Line = TRIM(Line)//" "//"-Sc2p"
                     ELSEIF(IfPlotDotsLines.EQ.2)THEN
-                        Line = TRIM(Line)//" "//"-W"//TRIM(DotsLinesThickness)//"p/"//TRIM(DotsLinesColor)
+                        Line = TRIM(Line)//" "//"-W"//TRIM(DotsLinesThickness)//"p"//PenSep//TRIM(DotsLinesColor)
                     ELSEIF(IfPlotDotsLines.EQ.3)THEN
-                        Line = TRIM(Line)//" "//"-W"//TRIM(DotsLinesThickness)//"p/"//TRIM(DotsLinesColor)
+                        Line = TRIM(Line)//" "//"-W"//TRIM(DotsLinesThickness)//"p"//PenSep//TRIM(DotsLinesColor)
+#ifndef GMT6
                         Line = TRIM(Line)//" "//"-m'>'"
+#endif
                     ENDIF
                     Line = TRIM(Line)//" "//"-O"
                     IF(KeepOpen(8).EQ.1) THEN
@@ -7601,17 +7742,22 @@
                         CLOSE(UNIT=33,STATUS="KEEP")
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"psxy"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psxy"
                         Line = TRIM(Line)//" "//TRIM(TempLabelsFile)
                         Line = TRIM(Line)//" "//TRIM(ProjectionC)
                         Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                     //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                         IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                             WroteBorder = .TRUE.
+#ifdef GMT6
+                            Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                               " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                             Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                                "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                                "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                         ENDIF
                         Line = TRIM(Line)//" "//"-GBlack"
                         Line = TRIM(Line)//" "//"-Sc12p"
@@ -7621,7 +7767,7 @@
                         CALL SYSTEM(TRIM(Line))
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"psxy"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psxy"
                         Line = TRIM(Line)//" "//TRIM(TempLabelsFile)
                         Line = TRIM(Line)//" "//"-C"//TRIM(TempPath)//"ContourPalette.cpt"
                         Line = TRIM(Line)//" "//TRIM(ProjectionC)
@@ -7660,7 +7806,7 @@
                     CLOSE(UNIT=33,STATUS="KEEP")
 
                     Line = ""
-                    Line = TRIM(Line)//TRIM(Path)//"psxy"
+                    Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psxy"
                     Line = TRIM(Line)//" "//TRIM(TempLabelsFile)
                     Line = TRIM(Line)//" "//TRIM(ProjectionC)
                     Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
@@ -7782,7 +7928,7 @@
                             CLOSE(UNIT=33,STATUS="KEEP")
 
                             Line = ""
-                            Line = TRIM(Line)//TRIM(Path)//"psxy"
+                            Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"psxy"
                             Line = TRIM(Line)//" "//TRIM(TempLabelsFile)
                             Line = TRIM(Line)//" "//TRIM(ProjectionC)
                             Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
@@ -7797,18 +7943,28 @@
                         ENDIF
 
                         OPEN(UNIT=33,FILE=TRIM(TempLabelsFile),ACTION="WRITE")
+#ifdef GMT6
+                        WRITE(UNIT=33,FMT='(A,2X,A,2X,I2.2,A,I2,A,A,2X,I2,2X,A,2X,A)') TRIM(LabelLon), TRIM(LabelLat), LabelsSize, &
+                                                                                    ",", 1, ",", TRIM(LabelsColor), 0, &
+                                                                                    TRIM(LabelAlign), TRIM(LabelC)
+#else
                         WRITE(UNIT=33,FMT='(A,2X,A,2X,I2.2,2X,I2,2X,I2,2X,A,2X,A)') TRIM(LabelLon), TRIM(LabelLat), LabelsSize, &
                                                                                     0, 1, TRIM(LabelAlign), TRIM(LabelC)
+#endif
                         CLOSE(UNIT=33,STATUS="KEEP")
 
                         Line = ""
-                        Line = TRIM(Line)//TRIM(Path)//"pstext"
+                        Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"pstext"
                         Line = TRIM(Line)//" "//TRIM(TempLabelsFile)
                         Line = TRIM(Line)//" "//TRIM(ProjectionC)
                         Line = TRIM(Line)//" "//"-R"//TRIM(ADJUSTL(XMin))//"/"//TRIM(ADJUSTL(XMax))//"/" &
                                                     //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                         Line = TRIM(Line)//" "//"-D"//TRIM(LabelX)//"/"//TRIM(LabelY)
+#ifdef GMT6
+                        Line = TRIM(Line)//" "//"-F+f+a+j"
+#else
                         Line = TRIM(Line)//" "//"-G"//TRIM(LabelsColor)
+#endif
                         IF((KeepOpen(11).EQ.1).OR.(I.LT.NumLabels))THEN
                             Line = TRIM(Line)//" "//"-K"
                         ENDIF
@@ -7839,7 +7995,7 @@
                 IF(IfPlotVectors.EQ.1)THEN
 
                     Line = ""
-                    Line = TRIM(Line)//TRIM(Path)//"grdvector"
+                    Line = TRIM(Line)//GMTPrefix(1:GMTPrefixLen)//"grdvector"
                     Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(VectorUFile)//".grd"
                     Line = TRIM(Line)//" "//TRIM(TempPath)//TRIM(VectorVFile)//".grd"
                     Line = TRIM(Line)//" "//TRIM(ProjectionC)
@@ -7851,10 +8007,15 @@
                                                 //TRIM(ADJUSTL(YMin))//"/"//TRIM(ADJUSTL(YMax))
                     IF(.NOT.WroteBorder.AND.(IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
                         WroteBorder = .TRUE.
+#ifdef GMT6
+                        Line = TRIM(Line)//" "//"-Bpxa"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))// &
+                                           " -Bpya"//TRIM(ADJUSTL(BorderIncrementMajorC))//"f"//TRIM(ADJUSTL(BorderIncrementMinorC))//" -BWeSn"
+#else
                         Line = TRIM(Line)//" "//"-Bp"//TRIM(ADJUSTL(BorderIncrementMajorC))// &
                                            "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//        &
                                            "/s"//TRIM(ADJUSTL(BorderIncrementMajorC))//       &
                                            "f"//TRIM(ADJUSTL(BorderIncrementMinorC))//"WeSn"
+#endif
                     ENDIF
                     Line = TRIM(Line)//" "//"-S"//TRIM(ADJUSTL(VectorMagC))//"i"
                     IF((IfGoogle.EQ.0).AND.(IfGIS.EQ.0))THEN
@@ -7897,7 +8058,7 @@
                             WRITE(UNIT=VectorScaleYC,FMT='(F8.5)') VectorScaleY
                         ENDIF
 
-                        CALL SYSTEM(TRIM(Path)//"psxy "//TRIM(TempPath)//TRIM(VectorScaleFile)// &
+                        CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"psxy "//TRIM(TempPath)//TRIM(VectorScaleFile)// &
                                 " -Jx1"//                                                        &
                                 " -R0/1/0/1 -GBlack -N -O"//                                     &
                                 " -Sv"//TRIM(ADJUSTL(VectorTailWidthC))//                        &
@@ -7915,7 +8076,7 @@
                         WRITE(UNIT=VectorTextFile,FMT='(A,I4.4,A)') "vectortext.",Record,".txt"
 
                         OPEN(UNIT=22,FILE=TRIM(TempPath)//TRIM(VectorTextFile),ACTION="WRITE")
-                        WRITE(UNIT=22,FMT='(A,F6.2,A)') "0.0 0.0 14 0 0 LT ",                     &
+                        WRITE(UNIT=22,FMT='(A,F6.2,A)') "0.0 0.0 14"//FontSep//"0 0 LT ",                     &
                                 VectorScaleMag," "//TRIM(VectorLabel)
                         CLOSE(UNIT=22,STATUS="KEEP")
 
@@ -7934,12 +8095,16 @@
                         ENDIF
 
                         Line = ""
-                        Line = TRIM(Path)//"pstext "//TRIM(TempPath)//TRIM(VectorTextFile)// &
+                        Line = GMTPrefix(1:GMTPrefixLen)//"pstext "//TRIM(TempPath)//TRIM(VectorTextFile)// &
                                 " -Jx1"
                         IF(KeepOpen(12).EQ.1)THEN
                             Line = TRIM(Line)//" -K"
                         ENDIF
+#ifdef GMT6
+                        Line = TRIM(Line)//" -R0/1/0/1 -F+f+a+j -N -O -Xa"//TRIM(ADJUSTL(SideBarXC))//"i"// &
+#else
                         Line = TRIM(Line)//" -R0/1/0/1 -GBlack -N -O -Xa"//TRIM(ADJUSTL(SideBarXC))//"i"// &
+#endif
                                 " -Ya"//TRIM(VectorScaleYC)//"i >> "//                            &
                                 TRIM(PlotName)//".ps"
                         CALL SYSTEM(TRIM(Line))
@@ -7967,11 +8132,15 @@
                     WRITE(UNIT=PlotLabelFile,FMT='(A,I4.4,A)') "plotlabel.",Record,".txt"
 
                     OPEN(UNIT=28,FILE=TRIM(TempPath)//TRIM(PlotLabelFile),ACTION="WRITE")
-                    WRITE(UNIT=28,FMT='(A,A)') "0.0 0.0 14 0 0 BC ",TRIM(PlotLabel)
+                    WRITE(UNIT=28,FMT='(A,A)') "0.0 0.0 14"//FontSep//"0 0 BC ",TRIM(PlotLabel)
                     CLOSE(UNIT=28,STATUS="KEEP")
 
-                    Line = TRIM(Path)//"pstext "//TRIM(TempPath)//TRIM(PlotLabelFile)      &
+                    Line = GMTPrefix(1:GMTPrefixLen)//"pstext "//TRIM(TempPath)//TRIM(PlotLabelFile)      &
+#ifdef GMT6
+                                //" -JX1i -R0/8/0/1 -F+f+a+j -Xa"//TRIM(ADJUSTL(PlotLabelXAdjustC)) &
+#else
                                 //" -JX1i -R0/8/0/1 -Xa"//TRIM(ADJUSTL(PlotLabelXAdjustC)) &
+#endif
                                 //"i -Ya"//TRIM(ADJUSTL(PlotLabelYAdjustC))//"i"  
                     IF(KeepOpen(13).EQ.1)THEN
                         Line = TRIM(Line)//" -K"
@@ -8002,7 +8171,7 @@
                     WRITE(UNIT=25,FMT='(A)') "0 0 0 1.0"
                     CLOSE(UNIT=25,STATUS="KEEP")
 
-                    Line = TRIM(Path)//"psxy "//TRIM(TempPath)//TRIM(TimeMaxFile) &
+                    Line = GMTPrefix(1:GMTPrefixLen)//"psxy "//TRIM(TempPath)//TRIM(TimeMaxFile) &
                                 //" -JX1i -R0/2/0/2 -N -O -Sv0.2i/0.0i/0.01"      &
                                 //" -Xa"//TRIM(ADJUSTL(SideBarXC))//"i"           &
                                 //" -Ya"//TRIM(ADJUSTL(TimeScaleYC))//"i"
@@ -8028,7 +8197,7 @@
                     ENDIF
                     CLOSE(UNIT=26,STATUS="KEEP")
 
-                    Line = TRIM(Path)//"psxy "//TRIM(TempPath)//TRIM(TimeCurrentFile) &
+                    Line = GMTPrefix(1:GMTPrefixLen)//"psxy "//TRIM(TempPath)//TRIM(TimeCurrentFile) &
                                 //" -JX1i -R0/2/0/2 -GBlack -N -O -Sv0.2i/0.0i/0.0i"  &
                                 //" -Xa"//TRIM(ADJUSTL(SideBarXC))//"i"               &
                                 //" -Ya"//TRIM(ADJUSTL(TimeScaleYC))//"i"
@@ -8044,7 +8213,7 @@
                     WRITE(UNIT=TimeCurrentTextFile,FMT='(A,I4.4,A)') "timecurrenttext.",Record,".txt"
                     OPEN(UNIT=27,FILE=TRIM(TempPath)//TRIM(TimeCurrentTextFile),ACTION="WRITE")
                     IF(IfAddTimeBar.EQ.1)THEN
-                        WRITE(UNIT=27,FMT='(A,F5.2,A)') "0 0 14 0 0 LT ",CurrentTime/86400.0," days"
+                        WRITE(UNIT=27,FMT='(A,F5.2,A)') "0 0 14"//FontSep//"0 0 LT ",CurrentTime/86400.0," days"
                     ELSEIF(IfAddTimeBar.EQ.2.OR.IfAddTimeBar.EQ.3)THEN
                         CALL DATEADD(ColdStartDate,INT(CurrentTime,8),ResultDate)
                         IF(IfAddTimeBar.EQ.3)THEN
@@ -8061,22 +8230,26 @@
                             ENDIF   
                         ENDIF
                         WRITE(UNIT=27,FMT='(A,I2.2,A,I2.2,A,I4.4)') &
-                            "0 0.125 10 0 0 LT ",&
+                            "0 0.125 10"//FontSep//"0 0 LT ",&
                             ResultDate%Month,"/",ResultDate%Day,"/",ResultDate%Year
                         IF(IfAddTimeBar.EQ.3)THEN
                             WRITE(UNIT=27,FMT='(A,I2.2,A,I2.2,A,I2.2,A)') &
-                                "0 -0.125 10 0 0 LT ",&
+                                "0 -0.125 10"//FontSep//"0 0 LT ",&
                                 ResultDate%Hour,":",ResultDate%Minute,":",ResultDate%Second,AMPMS
                         ELSEIF(IfAddTimeBar.EQ.2)THEN
                             WRITE(UNIT=27,FMT='(A,I2.2,A,I2.2,A,I2.2)') &
-                                "0 -0.125 10 0 0 LT ",&
+                                "0 -0.125 10"//FontSep//"0 0 LT ",&
                                 ResultDate%Hour,":",ResultDate%Minute,":",ResultDate%Second
                         ENDIF    
                     ENDIF
                     CLOSE(UNIT=27,STATUS="KEEP")
 
-                    Line = TRIM(Path)//"pstext "//TRIM(TempPath)                &
+                    Line = GMTPrefix(1:GMTPrefixLen)//"pstext "//TRIM(TempPath)                &
+#ifdef GMT6
+                                //TRIM(TimeCurrentTextFile)//" -JX1i -R0/2/0/2 -F+f+a+j" &
+#else
                                 //TRIM(TimeCurrentTextFile)//" -JX1i -R0/2/0/2" &
+#endif
                                 //" -Xa"//TRIM(ADJUSTL(SideBarXC))//"i"         &
                                 //" -Ya"//TRIM(ADJUSTL(TimeScaleTextYC))//"i"
 
@@ -8125,6 +8298,18 @@
                         WRITE(TempLogoFile,'(A)') LogoFile
                     ENDIF
 
+#ifdef GMT6
+                    IF((TRIM(LogoLocation).EQ."TL").OR.(TRIM(LogoLocation).EQ."LT"))THEN
+                        Line = "0/"//TRIM(ADJUSTL(HeightC))//"i+jTL"
+                    ELSEIF((TRIM(LogoLocation).EQ."TR").OR.(TRIM(LogoLocation).EQ."RT"))THEN
+                        Line = TRIM(ADJUSTL(WidthC))//"i/"//TRIM(ADJUSTL(HeightC))//"i+jTR"
+                    ELSEIF((TRIM(LogoLocation).EQ."BR").OR.(TRIM(LogoLocation).EQ."RB"))THEN
+                        Line = TRIM(ADJUSTL(WidthC))//"i/0+jBR"
+                    ELSE
+                        Line = "0/0+jBL"
+                    ENDIF
+
+#else
                     IF((TRIM(LogoLocation).EQ."TL").OR.(TRIM(LogoLocation).EQ."LT"))THEN
                         Line = "0/"//TRIM(ADJUSTL(HeightC))//"i/TL"
                     ELSEIF((TRIM(LogoLocation).EQ."TR").OR.(TRIM(LogoLocation).EQ."RT"))THEN
@@ -8135,13 +8320,20 @@
                         Line = "0/0/BL"
                     ENDIF
 
+#endif
                     IF(INDEX(TempLogoFile,"NULL").GT.0)THEN
                         CONTINUE
                     ELSE
-                        CALL SYSTEM(TRIM(Path)//"psimage "//TRIM(TempLogoFile)//   &
+#ifdef GMT6
+                        CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"psimage "//TRIM(TempLogoFile)//   &
+                                " -Dx"//TRIM(Line)//"+w"//TRIM(LogoWidth)//"i"//  &
+                                " -F+pthin,black -O >> "//TRIM(PlotName)//".ps")
+#else
+                        CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"psimage "//TRIM(TempLogoFile)//   &
                                 " -W"//TRIM(LogoWidth)//"i"//                  &
                                 " -C"//TRIM(Line)//                            &
                                 " -Fthin,black -O >> "//TRIM(PlotName)//".ps")
+#endif
 
                         IF(Verbose.GE.3)THEN
                             IF(IfGoogle.EQ.0)THEN
@@ -8156,22 +8348,24 @@
 
                 IF(IfGoogle.EQ.1)THEN
 
+#ifndef GMT6
                     CALL SYSTEM("grep -v showpage "//TRIM(PlotName)//".ps | sed -e "//    &
                                 "'s/scale 0 A/scale 0 A showpage/g' > "//TRIM(TempPath)// &
                                 TRIM(PlotName)//".ps")
 
                     CALL SYSTEM("mv "//TRIM(TempPath)//TRIM(PlotName)//".ps "// &
                                 TRIM(PlotName)//".ps")
+#endif
 
-                    CALL SYSTEM(TRIM(Path)//"ps2raster "//TRIM(PlotName)//".ps -A"//      &
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//" "//TRIM(PlotName)//".ps -A"//      &
                                 " -E"//TRIM(ResolutionC)//" -F"//TRIM(TempPath)//         &
-                                TRIM(PlotName)//".png"//" -G"//TRIM(GSPath)//"gs -P -TG")
+                                TRIM(PlotName)//ExtPNG//" -G"//TRIM(GSPath)//"gs -P -TG")
 
                     CALL SYSTEM("mv "//TRIM(TempPath)//TRIM(PlotName)//".png .")
 
                 ELSEIF(IfGIS.GT.0)THEN
 
-                    CALL SYSTEM(TRIM(Path)//"ps2raster "//TRIM(PlotName)//".ps -A"//      &
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//" "//TRIM(PlotName)//".ps -A"//      &
                                 " -E"//TRIM(ResolutionC)//" -F"//TRIM(TempPath)//         &
                                 TRIM(PlotName)//"_grf"//" -G"//TRIM(GSPath)//"gs -P -Tj -W")             
 
@@ -8183,21 +8377,23 @@
                     !    if the only thing in the PostScript file is the mesh (with no plot label,
                     !    no logo, etc.).  Try this fix.
                     IF(KeepOpen(2).EQ.1)THEN
+#ifndef GMT6
                         CALL SYSTEM("grep -v showpage "//TRIM(PlotName)//".ps | sed -e "//    &
                                     "'s/scale 0 A/scale 0 A showpage/g' > "//TRIM(TempPath)// &
                                     TRIM(PlotName)//".ps")
                         CALL SYSTEM("mv "//TRIM(TempPath)//TRIM(PlotName)//".ps "// &
                                     TRIM(PlotName)//".ps")
+#endif
                     ENDIF
 
                     IF(DoPNG.EQ.1)THEN
-                        Line = TRIM(Path)//"ps2raster"
+                        Line = GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//""
                         Line = TRIM(Line)//" "//TRIM(PlotName)//".ps"
                         IF(ImageTrimFlag.EQ.1)THEN
                             Line = TRIM(Line)//" "//"-A"
                         ENDIF
                         Line = TRIM(Line)//" "//"-E"//TRIM(ResolutionC)
-                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//".png"
+                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//ExtPNG
                         Line = TRIM(Line)//" "//"-G"//TRIM(GSPath)//"gs"
                         Line = TRIM(Line)//" "//"-P"
                         Line = TRIM(Line)//" "//"-TG"
@@ -8206,13 +8402,13 @@
                     ENDIF
 
                     IF(DoJPG.EQ.1)THEN
-                        Line = TRIM(Path)//"ps2raster"
+                        Line = GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//""
                         Line = TRIM(Line)//" "//TRIM(PlotName)//".ps"
                         IF(ImageTrimFlag.EQ.1)THEN
                             Line = TRIM(Line)//" "//"-A"
                         ENDIF
                         Line = TRIM(Line)//" "//"-E"//TRIM(ResolutionC)
-                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//".jpg"
+                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//ExtJPG
                         Line = TRIM(Line)//" "//"-G"//TRIM(GSPath)//"gs"
                         Line = TRIM(Line)//" "//"-P"
                         Line = TRIM(Line)//" "//"-Tj"
@@ -8221,13 +8417,13 @@
                     ENDIF
 
                     IF(DoPDF.EQ.1)THEN
-                        Line = TRIM(Path)//"ps2raster"
+                        Line = GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//""
                         Line = TRIM(Line)//" "//TRIM(PlotName)//".ps"
                         IF(ImageTrimFlag.EQ.1)THEN
                             Line = TRIM(Line)//" "//"-A"
                         ENDIF
                         Line = TRIM(Line)//" "//"-E"//TRIM(ResolutionC)
-                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//".pdf"
+                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//ExtPDF
                         Line = TRIM(Line)//" "//"-G"//TRIM(GSPath)//"gs"
                         Line = TRIM(Line)//" "//"-P"
                         Line = TRIM(Line)//" "//"-Tf"
@@ -8236,13 +8432,13 @@
                     ENDIF
 
                     IF(DoBMP.EQ.1)THEN
-                        Line = TRIM(Path)//"ps2raster"
+                        Line = GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//""
                         Line = TRIM(Line)//" "//TRIM(PlotName)//".ps"
                         IF(ImageTrimFlag.EQ.1)THEN
                             Line = TRIM(Line)//" "//"-A"
                         ENDIF
                         Line = TRIM(Line)//" "//"-E"//TRIM(ResolutionC)
-                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//".bmp"
+                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//ExtBMP
                         Line = TRIM(Line)//" "//"-G"//TRIM(GSPath)//"gs"
                         Line = TRIM(Line)//" "//"-P"
                         Line = TRIM(Line)//" "//"-Tb"
@@ -8251,13 +8447,13 @@
                     ENDIF
 
                     IF(DoTIFF.EQ.1)THEN
-                        Line = TRIM(Path)//"ps2raster"
+                        Line = GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//""
                         Line = TRIM(Line)//" "//TRIM(PlotName)//".ps"
                         IF(ImageTrimFlag.EQ.1)THEN
                             Line = TRIM(Line)//" "//"-A"
                         ENDIF
                         Line = TRIM(Line)//" "//"-E"//TRIM(ResolutionC)
-                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//".tif"
+                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//ExtTIF
                         Line = TRIM(Line)//" "//"-G"//TRIM(GSPath)//"gs"
                         Line = TRIM(Line)//" "//"-P"
                         Line = TRIM(Line)//" "//"-Tt"
@@ -8266,13 +8462,13 @@
                     ENDIF
 
                     IF(DoEPS.EQ.1)THEN
-                        Line = TRIM(Path)//"ps2raster"
+                        Line = GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//""
                         Line = TRIM(Line)//" "//TRIM(PlotName)//".ps"
                         IF(ImageTrimFlag.EQ.1)THEN
                             Line = TRIM(Line)//" "//"-A"
                         ENDIF
                         Line = TRIM(Line)//" "//"-E"//TRIM(ResolutionC)
-                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//".eps"
+                        Line = TRIM(Line)//" "//"-F"//TRIM(TempPath)//TRIM(PlotName)//ExtEPS
                         Line = TRIM(Line)//" "//"-G"//TRIM(GSPath)//"gs"
                         Line = TRIM(Line)//" "//"-P"
                         Line = TRIM(Line)//" "//"-Te"
@@ -10165,14 +10361,14 @@
                     WRITE(UNIT=YMaxBuf,FMT=1236) LatN+LatLonBuffer
                     WRITE(UNIT=YMinBuf,FMT=1236) LatS-LatLonBuffer
 
-                    CALL SYSTEM(TRIM(Path)//"xyz2grd "//TRIM(TempPath)//TRIM(VectorUFile)//".xyz"//     &
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"xyz2grd "//TRIM(TempPath)//TRIM(VectorUFile)//".xyz"//     &
                             " -G"//TRIM(TempPath)//TRIM(VectorUFile)//".grd -I"//TRIM(VectorSpacingC)// &
                             TRIM(VectorUnits)//                                                         &
                             " -R"//TRIM(ADJUSTL(XMinBuf))//"/"//TRIM(ADJUSTL(XMaxBuf))//"/"             &
                             //TRIM(ADJUSTL(YMinBuf))//"/"//TRIM(ADJUSTL(YMaxBuf))//                     &
                             " -N0.0")
                             
-                    CALL SYSTEM(TRIM(Path)//"xyz2grd "//TRIM(TempPath)//TRIM(VectorVFile)//".xyz"//     &
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"xyz2grd "//TRIM(TempPath)//TRIM(VectorVFile)//".xyz"//     &
                             " -G"//TRIM(TempPath)//TRIM(VectorVFile)//".grd -I"//TRIM(VectorSpacingC)// &
                             TRIM(VectorUnits)//                                                         &
                             " -R"//TRIM(ADJUSTL(XMinBuf))//"/"//TRIM(ADJUSTL(XMaxBuf))//"/"             &
@@ -11016,14 +11212,26 @@
                         WRITE(*,'(A)') " "
                     ENDIF
 
-                    CALL SYSTEM(TRIM(Path)//"gmtset PAPER_MEDIA A0")
-                    CALL SYSTEM(TRIM(Path)//"gmtset PLOT_DEGREE_FORMAT -D")
-                    CALL SYSTEM(TRIM(Path)//"gmtset OUTPUT_DEGREE_FORMAT -D")
-                    CALL SYSTEM(TRIM(Path)//"gmtset BASEMAP_TYPE fancy")
-                    CALL SYSTEM(TRIM(Path)//"gmtset D_FORMAT %lg")
-                    CALL SYSTEM(TRIM(Path)//"gmtset HISTORY FALSE")
+#ifdef GMT6
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset PS_MEDIA A0")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset FORMAT_GEO_MAP D")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset FORMAT_GEO_OUT D")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset MAP_FRAME_TYPE fancy")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset FORMAT_FLOAT_OUT %lg")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset GMT_HISTORY false")
 #ifdef PLAIN
-                    CALL SYSTEM(TRIM(Path)//"gmtset BASEMAP_TYPE plain")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset MAP_FRAME_TYPE plain")
+#endif
+#else
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset PAPER_MEDIA A0")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset PLOT_DEGREE_FORMAT -D")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset OUTPUT_DEGREE_FORMAT -D")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset BASEMAP_TYPE fancy")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset D_FORMAT %lg")
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset HISTORY FALSE")
+#ifdef PLAIN
+                    CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//"gmtset BASEMAP_TYPE plain")
+#endif
 #endif
 
 #ifdef CMPI
@@ -11220,7 +11428,7 @@
                 IF((MyRank.EQ.0).AND.(IfGIS.EQ.2))THEN
 
                     IF(INDEX(ContourFileType,"GRID-DECOMP").LE.0)THEN
-                        CALL SYSTEM(TRIM(Path)//"ps2raster Scale.ps -A -E200 -FScale.jpg"// &
+                        CALL SYSTEM(GMTPrefix(1:GMTPrefixLen)//Ps2RasterCmd//" Scale.ps -A -E200 -FScale.jpg"// &
                                     " -G"//TRIM(GSPath)//"gs -P -Tj")
                     ENDIF
 

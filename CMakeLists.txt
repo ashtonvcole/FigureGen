@@ -30,6 +30,11 @@ endif ()
 target_compile_definitions(figuregen PUBLIC VARFILLVAL)
 set(CMAKE_Fortran_FLAGS "-Wall -Wextra -O3")
 
+option(GMT6 "Build for GMT 6 (single gmt executable)" OFF)
+if (${GMT6})
+    target_compile_definitions(figuregen PUBLIC GMT6)
+endif()
+
 if (${GMT_PRE_5})
     target_compile_definitions(figuregen PUBLIC GMTPRE5)
 endif()

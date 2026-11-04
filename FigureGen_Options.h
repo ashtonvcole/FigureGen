@@ -30,6 +30,17 @@
 !
 !
 !------------------------------------------------------------------!
+! G M T  6
+!...Call GMT 6 modules through the single "gmt" executable, e.g.
+!   "gmt psxy" instead of "psxy", and use GMT 6 names for the
+!   gmtset parameters. Without this option, FigureGen expects the
+!   standalone executables of GMT 4/5 (psxy, ps2raster, etc.) in
+!   the GMT path given in the input file.
+!#define GMT6
+!------------------------------------------------------------------!
+!
+!
+!------------------------------------------------------------------!
 ! P L A I N  M A P  S T Y L I N G
 !...Generate a more plain looking map using GMT than the
 !   traditional "fancy" border using GMT.
