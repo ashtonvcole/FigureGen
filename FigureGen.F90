@@ -4630,17 +4630,17 @@
                         IF(TRIM(ColorLines).EQ."GRID-BATH")THEN
                             ZVal = 0.5D0*(BathGlobal(NC(1,NEList(I)))+BathGlobal(NC(2,NEList(I))))
                             ZVal = ZVal * ContourConversionFactor
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSEIF(INDEX(ColorLines,"GRID-DECOMP").GT.0)THEN
                             ZVal = 0.5D0*(NodeColors(NC(1,NEList(I)))+NodeColors(NC(2,NEList(I))))
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSEIF(TRIM(ColorLines).EQ."GRID-SIZE")THEN
                             ZVal = ComputeDistance( Long(NC(1,NEList(I))), &
                                                     Lat( NC(1,NEList(I))), &
                                                     Long(NC(2,NEList(I))), &
                                                     Lat( NC(2,NEList(I)))  )
                             ZVal = ZVal * ContourConversionFactor
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSE
                             WRITE(UNIT=31,FMT='(A)') ">"
                         ENDIF
@@ -4655,17 +4655,17 @@
                         IF(TRIM(ColorLines).EQ."GRID-BATH")THEN
                             ZVal = 0.5D0*(BathGlobal(NC(2,NEList(I)))+BathGlobal(NC(3,NEList(I))))
                             ZVal = ZVal * ContourConversionFactor
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSEIF(INDEX(ColorLines,"GRID-DECOMP").GT.0)THEN
                             ZVal = 0.5D0*(NodeColors(NC(2,NEList(I)))+NodeColors(NC(3,NEList(I))))
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSEIF(TRIM(ColorLines).EQ."GRID-SIZE")THEN
                             ZVal = ComputeDistance( Long(NC(2,NEList(I))), &
                                                     Lat( NC(2,NEList(I))), &
                                                     Long(NC(3,NEList(I))), &
                                                     Lat( NC(3,NEList(I)))  )
                             ZVal = ZVal * ContourConversionFactor
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSE
                             WRITE(UNIT=31,FMT='(A)') ">"
                         ENDIF
@@ -4680,17 +4680,17 @@
                         IF(TRIM(ColorLines).EQ."GRID-BATH")THEN
                             ZVal = 0.5D0*(BathGlobal(NC(3,NEList(I)))+BathGlobal(NC(1,NEList(I))))
                             ZVal = ZVal * ContourConversionFactor
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSEIF(INDEX(ColorLines,"GRID-DECOMP").GT.0)THEN
                             ZVal = 0.5D0*(NodeColors(NC(3,NEList(I)))+NodeColors(NC(1,NEList(I))))
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSEIF(TRIM(ColorLines).EQ."GRID-SIZE")THEN
                             ZVal = ComputeDistance( Long(NC(3,NEList(I))), &
                                                     Lat( NC(3,NEList(I))), &
                                                     Long(NC(1,NEList(I))), &
                                                     Lat( NC(1,NEList(I)))  )
                             ZVal = ZVal * ContourConversionFactor
-                            WRITE(UNIT=31,FMT='(A,F15.6)') "> -Z",ZVal
+                            WRITE(UNIT=31,FMT='(A,F0.6)') "> -Z",ZVal
                         ELSE
                             WRITE(UNIT=31,FMT='(A)') ">"
                         ENDIF
