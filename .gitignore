@@ -10,3 +10,5 @@ example
 */Temp
 
 .gmtdefaults*
+*.mod
+.DS_Store
